@@ -7,6 +7,19 @@
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.23.9/babel.min.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    const app = initializeApp({
+      apiKey: "AIzaSyA1eh9zIUGji3lxflpWawzIcUYsXk-E4TQ",
+      authDomain: "lacocinadegasty-300f7.firebaseapp.com",
+      projectId: "lacocinadegasty-300f7",
+      storageBucket: "lacocinadegasty-300f7.firebasestorage.app",
+      messagingSenderId: "387145163884",
+      appId: "1:387145163884:web:0d14d42479440d74026449"
+    });
+    window._db = { fs: getFirestore(app), doc, getDoc, setDoc };
+  </script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:Georgia,serif;background:#f5f0e8}
@@ -92,6 +105,7 @@ const MENU = {
 
 const DIAS = ["Lunes", "Martes", "Miércoles", "Jueves"];
 const formatPrice = (p) => `$${p.toLocaleString("es-AR")}`;
+function getFoto(key, fotosCustom) { return (fotosCustom && fotosCustom[key]) || FOTOS[key] || ""; }
 
 // ─── STORAGE ──────────────────────────────────────────────────────────────────
 async function loadData(key, fallback) {
@@ -196,16 +210,19 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
   const [celular, setCelular] = useState("");
   const [celularError, setCelularError] = useState("");
   const [showBienvenida, setShowBienvenida] = useState(true);
+  const [fotosCustom, setFotosCustom] = useState({});
+  const [fotosCustom, setFotosCustom] = useState({});
   const [extraItems, setExtraItems] = useState([]);
   const [extraItemsByDia, setExtraItemsByDia] = useState({});
 
   useEffect(() => {
     (async () => {
-      const [p, s, ef, ed] = await Promise.all([
+      const [p, s, ef, ed, fc] = await Promise.all([
         loadData("gasty-pedidos", []),
         loadData("gasty-stock2", null),
         loadData("gasty-extra-fijos", []),
         loadData("gasty-extra-dias", {}),
+        loadData("gasty-fotos", {}),
       ]);
       setPedidos(p);
       setStock(s || buildInitialStock());
@@ -524,10 +541,10 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
         <div style={S.body}>
           {/* Tabs */}
           <div style={{ display: "flex", gap: 6, marginBottom: 16, overflowX: "auto" }}>
-            {["pedidos","stock","menu"].map(t => (
+            {["pedidos","stock","menu","fotos"].map(t => (
               <button key={t} style={{ ...S.tab(adminTab === t), flex: "none", padding: "8px 16px", borderRadius: 20, fontSize: 12, textTransform: "capitalize" }}
                 onClick={() => setAdminTab(t)}>
-                {t === "pedidos" ? `📋 Pedidos (${pedidos.length})` : t === "stock" ? "📦 Stock" : "✏️ Menú"}
+                {t === "pedidos" ? `📋 Pedidos (${pedidos.length})` : t === "stock" ? "📦 Stock" : t === "menu" ? "✏️ Menú" : "🖼 Fotos"}
               </button>
             ))}
           </div>
@@ -535,11 +552,15 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
           {/* ── PEDIDOS ── */}
           {adminTab === "pedidos" && (
             <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <span style={{ fontSize: 13, color: "#888" }}>{pedidos.filter(p=>!p.entregado).length} pendientes · {pedidos.filter(p=>p.entregado).length} entregados</span>
+                {pedidos.length > 0 && <button onClick={async () => { if(window.confirm("¿Limpiar todos los pedidos del día?")) { await saveData("gasty-pedidos", []); setPedidos([]); } }} style={{ background: "#c0392b", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>🗑 Limpiar todo</button>}
+              </div>
               {pedidos.length === 0 && <p style={{ color: "#aaa" }}>Todavía no hay pedidos.</p>}
               {[...pedidos].reverse().map((p) => (
-                <div key={p.id} style={S.card}>
+                <div key={p.id} style={{ ...S.card, opacity: p.entregado ? 0.5 : 1, borderLeft: p.entregado ? "4px solid #27ae60" : "4px solid "+C.brown }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <strong>👤 {p.cliente}</strong>
+                    <strong style={{ textDecoration: p.entregado ? "line-through" : "none" }}>👤 {p.cliente}</strong>
                     <span style={{ fontSize: 12, color: "#aaa" }}>{p.fecha} {p.hora}</span>
                   </div>
                   {p.celular && <div style={{ fontSize: 13, color: "#555", marginBottom: 6 }}>📱 {p.celular}</div>}
@@ -547,7 +568,16 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
                     <div key={i} style={{ fontSize: 13, color: "#555", marginBottom: 2 }}>• {it.nombre} ×{it.cantidad} ({it.dia}) — {formatPrice(it.precio * it.cantidad)}</div>
                   ))}
                   {p.nota && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic", margin: "6px 0 0" }}>📝 {p.nota}</p>}
-                  <div style={{ marginTop: 8, fontWeight: "bold", color: C.gold }}>Total: {formatPrice(p.total)}</div>
+                  <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontWeight: "bold", color: C.gold }}>Total: {formatPrice(p.total)}</span>
+                    <button onClick={async () => {
+                      const updated = pedidos.map(x => x.id === p.id ? {...x, entregado: !x.entregado} : x);
+                      setPedidos(updated);
+                      await saveData("gasty-pedidos", updated);
+                    }} style={{ background: p.entregado ? "#888" : "#27ae60", color: "#fff", border: "none", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 12 }}>
+                      {p.entregado ? "↩ Desmarcar" : "✓ Entregado"}
+                    </button>
+                  </div>
                 </div>
               ))}
             </>
@@ -594,6 +624,9 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
           {/* ── MENÚ ── */}
           {adminTab === "menu" && <MenuAdmin extraItems={extraItems} setExtraItems={setExtraItems} extraItemsByDia={extraItemsByDia} setExtraItemsByDia={setExtraItemsByDia} stock={stock} setStock={setStock} />}
 
+          {/* ── FOTOS ── */}
+          {adminTab === "fotos" && <FotosAdmin fotosCustom={fotosCustom} setFotosCustom={setFotosCustom} />}
+
           <div style={{ textAlign: "center", paddingBottom: 20 }}>
             <button style={{ background: "transparent", border: "none", color: "#bbb", fontSize: 12, cursor: "pointer" }} onClick={() => { setScreen("login"); setPass(""); }}>Cerrar sesión</button>
           </div>
@@ -608,6 +641,55 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
 // ── MENU ADMIN COMPONENT ──────────────────────────────────────────────────────
 const DIAS_ALL = ["Lunes", "Martes", "Miércoles", "Jueves"];
 const EMOJIS = ["🍕","🥧","🥟","🍝","🥩","🥒","🫔","🍞","🫓","🥗","🍲","🫕","🧆","🥘","🍳"];
+
+function FotosAdmin({ fotosCustom, setFotosCustom }) {
+  const items = [
+    { key: "faina", label: "Fainá Grande" },
+    { key: "muzzarella", label: "Pizza Muzzarella" },
+    { key: "fugazza", label: "Pizza Fugazza" },
+    { key: "jamon_muzz", label: "Pizza Jamón y Muzzarella" },
+    { key: "jamon_morrones", label: "Pizza Jamón y Morrones" },
+    { key: "calabresa", label: "Pizza Calabresa" },
+    { key: "milanesa", label: "Milanesas" },
+    { key: "zapallitos", label: "Zapallitos Rellenos" },
+    { key: "canelones", label: "Canelones" },
+    { key: "pastel", label: "Pastel de Papas/Calabaza" },
+    { key: "albondigas", label: "Albóndigas" },
+    { key: "empanadas", label: "Empanadas" },
+    { key: "pan", label: "Pan Multicereal" },
+  ];
+
+  function handleFile(key, e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const updated = { ...fotosCustom, [key]: ev.target.result };
+      setFotosCustom(updated);
+      await saveData("gasty-fotos", updated);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  return (
+    <div>
+      <p style={{ fontSize: 13, color: "#888", marginBottom: 16 }}>Tocá cada foto para cambiarla. Se guarda automáticamente.</p>
+      {items.map(item => (
+        <div key={item.key} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, background: "#fff", borderRadius: 10, padding: "10px 14px" }}>
+          <img src={fotosCustom[item.key] || FOTOS[item.key] || ""} alt={item.label} style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 8, background: "#eee" }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: "bold", fontSize: 14, marginBottom: 4 }}>{item.label}</div>
+            <label style={{ background: C.brown, color: "#fff", borderRadius: 6, padding: "4px 12px", fontSize: 12, cursor: "pointer" }}>
+              📷 Cambiar foto
+              <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => handleFile(item.key, e)} />
+            </label>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 function MenuAdmin({ extraItems, setExtraItems, extraItemsByDia, setExtraItemsByDia, stock, setStock }) {
   const [tab, setTab] = useState("fijos"); // fijos | diarios | agregar
