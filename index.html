@@ -689,14 +689,38 @@ function StockAdmin({ stock, setStock, editStock, setEditStock, extraItems, setE
   const localEditsRef = useR({});
   const [msg, setMsg] = useS("");
 
-  // Sincronizar localEdits cada vez que menuEdits llega/cambia desde Firebase
+  // Inicializar localEdits con TODOS los items del menú + valores de Firebase
   useEff(() => {
     if (menuEdits != null) {
-      const copy = JSON.parse(JSON.stringify(menuEdits));
-      setLocalEdits(copy);
-      localEditsRef.current = copy;
+      // Construir objeto con TODOS los items del menú base
+      const all = {};
+      // Pizzas
+      [...PIZZAS, ...extraItems].forEach(item => {
+        const ed = menuEdits[item.id] || {};
+        all[item.id] = {
+          nombre: ed.nombre ?? item.nombre,
+          descripcion: ed.descripcion ?? item.descripcion,
+          precio: ed.precio ?? item.precio,
+          oculto: ed.oculto ?? false,
+        };
+      });
+      // Comidas caseras
+      const DIAS_LOCAL = ["Lunes", "Martes", "Miércoles", "Jueves"];
+      DIAS_LOCAL.forEach(dia => {
+        [...MENU[dia], ...(extraItemsByDia[dia] || [])].forEach(item => {
+          const ed = menuEdits[item.id] || {};
+          all[item.id] = {
+            nombre: ed.nombre ?? item.nombre,
+            descripcion: ed.descripcion ?? item.descripcion,
+            precio: ed.precio ?? item.precio,
+            oculto: ed.oculto ?? false,
+          };
+        });
+      });
+      setLocalEdits(all);
+      localEditsRef.current = all;
     }
-  }, [menuEdits]);
+  }, [menuEdits, extraItems, extraItemsByDia]);
 
   const showMsg = (m) => { setMsg(m); setTimeout(() => setMsg(""), 2500); };
 
