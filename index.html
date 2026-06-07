@@ -105,6 +105,11 @@ const MENU = {
 
 const DIAS = ["Lunes", "Martes", "Miércoles", "Jueves"];
 const formatPrice = (p) => `$${p.toLocaleString("es-AR")}`;
+function applyMenuEdit(item, menuEdits) {
+  const ed = menuEdits?.[item.id];
+  if (!ed) return item;
+  return { ...item, nombre: ed.nombre ?? item.nombre, descripcion: ed.descripcion ?? item.descripcion, precio: ed.precio ?? item.precio };
+}
 function getFoto(key, fotosCustom) { return (fotosCustom && fotosCustom[key]) || FOTOS[key] || ""; }
 
 // ─── STORAGE ──────────────────────────────────────────────────────────────────
@@ -214,20 +219,23 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
   const [fotoEscalas, setFotoEscalas] = useState({});
   const [extraItems, setExtraItems] = useState([]);
   const [extraItemsByDia, setExtraItemsByDia] = useState({});
+  const [menuEdits, setMenuEdits] = useState({}); // overrides del menu base: {id: {nombre,descripcion,precio,oculto}}
 
   useEffect(() => {
     (async () => {
-      const [p, s, ef, ed, fc] = await Promise.all([
+      const [p, s, ef, ed, fc, me] = await Promise.all([
         loadData("gasty-pedidos", []),
         loadData("gasty-stock2", null),
         loadData("gasty-extra-fijos", []),
         loadData("gasty-extra-dias", {}),
         loadData("gasty-fotos", {}),
+        loadData("gasty-menu-edits", {}),
       ]);
       setPedidos(p);
       setStock(s || buildInitialStock());
       setExtraItems(ef);
       setExtraItemsByDia(ed);
+      setMenuEdits(me);
     })();
   }, []);
 
@@ -287,15 +295,18 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
     window.open(`https://wa.me/5491131103716?text=${msg}`, "_blank");
   };
 
-  const handleStockSave = async () => {
+  const handleStockSave = async (newMenuEdits) => {
     const newStock = JSON.parse(JSON.stringify(stock));
     Object.entries(editStock).forEach(([dia, items]) => {
       if (!newStock[dia]) newStock[dia] = {};
       Object.entries(items).forEach(([id, val]) => { newStock[dia][id] = parseInt(val) || 0; });
     });
-    await saveData("gasty-stock2", newStock);
+    const saves = [saveData("gasty-stock2", newStock)];
+    if (newMenuEdits) saves.push(saveData("gasty-menu-edits", newMenuEdits));
+    await Promise.all(saves);
     setStock(newStock); setEditStock({});
-    alert("✅ Stock guardado");
+    if (newMenuEdits) setMenuEdits(newMenuEdits);
+    alert("✅ Cambios guardados");
   };
 
   if (!stock) return <div style={{ padding: 40, textAlign: "center", fontFamily: "Georgia,serif", color: C.brown }}>Cargando...</div>;
@@ -466,7 +477,7 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
                 <div style={{ fontSize: 12, color: "#d4b896" }}>Hechas con amor · Con 24-48hs de anticipación</div>
               </div>
               {/* Todos los items de todas las categorías sin días */}
-              {DIAS.flatMap((dia) => [...MENU[dia], ...(extraItemsByDia[dia] || []).filter(i => i.activo !== false)]).filter((item, idx, arr) => arr.findIndex(x => x.id === item.id) === idx).map((item) => {
+              {DIAS.flatMap((dia) => [...MENU[dia].filter(m => !menuEdits[m.id]?.oculto).map(m => applyMenuEdit(m, menuEdits)), ...(extraItemsByDia[dia] || []).filter(i => i.activo !== false)]).filter((item, idx, arr) => arr.findIndex(x => x.id === item.id) === idx).map((item) => {
                 const dia = DIAS.find(d => [...MENU[d], ...(extraItemsByDia[d] || [])].some(x => x.id === item.id)) || DIAS[0];
                 return <ItemCard key={item.id} item={item} dia={dia} carrito={carrito} stock={Math.max(...DIAS.map(d => stock[d]?.[item.id] ?? 0))} onAdd={addToCart} onRemove={removeFromCart} />;
               })}
@@ -480,7 +491,7 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
                 <div style={{ fontSize: 20, fontWeight: "bold", marginBottom: 4 }}>🍕 Pizzas Pre-Cocidas</div>
                 <div style={{ fontSize: 12, color: "#d4b896" }}>Listas para hornear en 5 min · Disponibles todos los días</div>
               </div>
-              {[...PIZZAS, ...extraItems.filter(i => i.activo !== false)].map((item) => (
+              {[...PIZZAS.filter(p => !menuEdits[p.id]?.oculto).map(p => applyMenuEdit(p, menuEdits)), ...extraItems.filter(i => i.activo !== false)].map((item) => (
                 <div key={item.id} style={{ background: "#fff", borderRadius: 16, marginBottom: 14, overflow: "hidden", boxShadow: "0 3px 14px rgba(123,58,16,0.12)", border: "1px solid rgba(123,58,16,0.08)" }}>
                   {item.foto && (
                     <div style={{ position: "relative" }}>
@@ -582,40 +593,14 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
 
           {/* ── STOCK ── */}
           {adminTab === "stock" && (
-            <>
-              <p style={{ fontSize: 12, color: "#aaa", marginBottom: 12 }}>Modificá las cantidades disponibles y guardá.</p>
-              <div style={S.card}>
-                <div style={{ fontWeight: "bold", color: C.gold, marginBottom: 10 }}>🍕 Pizzas, Pan y Fainá</div>
-                {[...PIZZAS, ...extraItems].map((item) => {
-                  const val = editStock["pizzas"]?.[item.id] ?? stock.pizzas?.[item.id] ?? 0;
-                  return (
-                    <div key={item.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                      <span style={{ fontSize: 13, flex: 1 }}>{item.emoji} {item.nombre}</span>
-                      <input type="number" min={0} value={val}
-                        onChange={(e) => setEditStock((prev) => ({ ...prev, pizzas: { ...(prev.pizzas || {}), [item.id]: e.target.value } }))}
-                        style={{ ...S.input, width: 60, margin: 0, textAlign: "center", padding: "6px 8px" }} />
-                    </div>
-                  );
-                })}
-              </div>
-              {DIAS.map((dia) => (
-                <div key={dia} style={S.card}>
-                  <div style={{ fontWeight: "bold", color: C.gold, marginBottom: 10 }}>📅 {dia}</div>
-                  {[...MENU[dia], ...(extraItemsByDia[dia] || [])].map((item) => {
-                    const val = editStock[dia]?.[item.id] ?? stock[dia]?.[item.id] ?? 0;
-                    return (
-                      <div key={item.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                        <span style={{ fontSize: 13, flex: 1 }}>{item.emoji} {item.nombre}</span>
-                        <input type="number" min={0} value={val}
-                          onChange={(e) => setEditStock((prev) => ({ ...prev, [dia]: { ...(prev[dia] || {}), [item.id]: e.target.value } }))}
-                          style={{ ...S.input, width: 60, margin: 0, textAlign: "center", padding: "6px 8px" }} />
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-              <button style={{ ...S.btn(), width: "100%", marginBottom: 10 }} onClick={handleStockSave}>Guardar cambios</button>
-            </>
+            <StockAdmin
+              stock={stock} setStock={setStock}
+              editStock={editStock} setEditStock={setEditStock}
+              extraItems={extraItems} setExtraItems={setExtraItems}
+              extraItemsByDia={extraItemsByDia} setExtraItemsByDia={setExtraItemsByDia}
+              menuEdits={menuEdits} setMenuEdits={setMenuEdits}
+              handleStockSave={handleStockSave}
+            />
           )}
 
           {/* ── MENÚ ── */}
@@ -633,6 +618,142 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
   }
 
   return null;
+}
+
+// ── STOCK ADMIN COMPONENT ────────────────────────────────────────────────────
+function StockAdmin({ stock, setStock, editStock, setEditStock, extraItems, setExtraItems, extraItemsByDia, setExtraItemsByDia, menuEdits, setMenuEdits, handleStockSave }) {
+  const { useState: useS } = React;
+  const [localEdits, setLocalEdits] = useS(() => JSON.parse(JSON.stringify(menuEdits || {})));
+  const [msg, setMsg] = useS("");
+
+  const showMsg = (m) => { setMsg(m); setTimeout(() => setMsg(""), 2500); };
+
+  const setField = (id, field, val) => {
+    setLocalEdits(prev => ({ ...prev, [id]: { ...(prev[id] || {}), [field]: val } }));
+  };
+
+  const getVal = (item, field) => {
+    if (field === "nombre") return localEdits[item.id]?.nombre ?? item.nombre;
+    if (field === "descripcion") return localEdits[item.id]?.descripcion ?? item.descripcion;
+    if (field === "precio") return localEdits[item.id]?.precio ?? item.precio;
+    return "";
+  };
+
+  const isOculto = (id) => !!localEdits[id]?.oculto;
+
+  const toggleOculto = (id) => {
+    setLocalEdits(prev => ({ ...prev, [id]: { ...(prev[id] || {}), oculto: !prev[id]?.oculto } }));
+  };
+
+  const handleSave = async () => {
+    // Convertir precios a número
+    const cleaned = {};
+    Object.entries(localEdits).forEach(([id, ed]) => {
+      cleaned[id] = { ...ed, precio: ed.precio ? parseInt(ed.precio) : undefined };
+    });
+    await handleStockSave(cleaned);
+    showMsg("✅ Guardado");
+  };
+
+  const renderRow = (item, categoria, dia) => {
+    const stockVal = categoria === "pizzas"
+      ? (editStock["pizzas"]?.[item.id] ?? stock?.pizzas?.[item.id] ?? 0)
+      : (editStock[dia]?.[item.id] ?? stock?.[dia]?.[item.id] ?? 0);
+    const oculto = isOculto(item.id);
+    const isExtra = item.id?.startsWith("custom-");
+
+    return (
+      <div key={item.id} style={{ borderBottom: "1px solid #f0e8de", paddingBottom: 12, marginBottom: 12, opacity: oculto ? 0.45 : 1 }}>
+        {/* Fila 1: nombre + stock + borrar/ocultar */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <span style={{ fontSize: 15 }}>{item.emoji}</span>
+          <input
+            value={getVal(item, "nombre")}
+            onChange={e => setField(item.id, "nombre", e.target.value)}
+            style={{ flex: 1, padding: "5px 8px", borderRadius: 6, border: "1.5px solid rgba(123,58,16,0.25)", fontFamily: "Georgia,serif", fontSize: 13, color: "#5a3010", background: "#fffaf5", outline: "none" }}
+          />
+          <input
+            type="number" min={0} value={stockVal}
+            onChange={(e) => {
+              if (categoria === "pizzas") {
+                setEditStock(prev => ({ ...prev, pizzas: { ...(prev.pizzas || {}), [item.id]: e.target.value } }));
+              } else {
+                setEditStock(prev => ({ ...prev, [dia]: { ...(prev[dia] || {}), [item.id]: e.target.value } }));
+              }
+            }}
+            style={{ width: 52, padding: "5px 6px", borderRadius: 6, border: "1.5px solid rgba(123,58,16,0.25)", fontFamily: "Georgia,serif", fontSize: 13, textAlign: "center", background: "#fffaf5", outline: "none" }}
+            title="Cantidad disponible"
+          />
+          <button
+            onClick={() => toggleOculto(item.id)}
+            title={oculto ? "Mostrar en el menú" : "Ocultar del menú"}
+            style={{ background: oculto ? "#27ae60" : "#e67e22", color: "#fff", border: "none", borderRadius: 6, padding: "5px 8px", cursor: "pointer", fontSize: 12, flexShrink: 0 }}>
+            {oculto ? "👁 Mostrar" : "🙈 Ocultar"}
+          </button>
+          {isExtra && (
+            <button
+              onClick={async () => {
+                if (categoria === "pizzas") {
+                  const updated = extraItems.filter(i => i.id !== item.id);
+                  setExtraItems(updated); await saveData("gasty-extra-fijos", updated);
+                } else {
+                  const updated = { ...extraItemsByDia, [dia]: (extraItemsByDia[dia] || []).filter(i => i.id !== item.id) };
+                  setExtraItemsByDia(updated); await saveData("gasty-extra-dias", updated);
+                }
+                showMsg("🗑️ Eliminado");
+              }}
+              style={{ background: "#c0392b", color: "#fff", border: "none", borderRadius: 6, padding: "5px 8px", cursor: "pointer", fontSize: 12, flexShrink: 0 }}>
+              🗑️
+            </button>
+          )}
+        </div>
+        {/* Fila 2: descripción + precio */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            value={getVal(item, "descripcion")}
+            onChange={e => setField(item.id, "descripcion", e.target.value)}
+            placeholder="Descripción..."
+            style={{ flex: 1, padding: "4px 8px", borderRadius: 6, border: "1.5px solid rgba(123,58,16,0.2)", fontFamily: "Georgia,serif", fontSize: 12, color: "#888", background: "#fffaf5", outline: "none" }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+            <span style={{ fontSize: 12, color: "#C8953A", fontWeight: "bold" }}>$</span>
+            <input
+              type="number" min={0}
+              value={getVal(item, "precio")}
+              onChange={e => setField(item.id, "precio", e.target.value)}
+              style={{ width: 80, padding: "4px 6px", borderRadius: 6, border: "1.5px solid rgba(200,149,58,0.5)", fontFamily: "Georgia,serif", fontSize: 13, color: "#C8953A", fontWeight: "bold", background: "#fffaf5", outline: "none", textAlign: "right" }}
+              title="Precio"
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const DIAS_LOCAL = ["Lunes", "Martes", "Miércoles", "Jueves"];
+
+  return (
+    <>
+      {msg && <div style={{ background: "#27ae60", color: "#fff", borderRadius: 8, padding: "10px 14px", marginBottom: 12, fontSize: 14, textAlign: "center" }}>{msg}</div>}
+      <p style={{ fontSize: 12, color: "#aaa", marginBottom: 12 }}>Editá nombre, descripción, precio y stock. Podés ocultar platos del menú sin eliminarlos.</p>
+
+      {/* Pizzas, Pan y Fainá */}
+      <div style={{ background: "#fff", borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: "0 2px 10px rgba(123,58,16,0.08)", border: "1px solid rgba(123,58,16,0.1)" }}>
+        <div style={{ fontWeight: "bold", color: C.gold, marginBottom: 14, fontSize: 15 }}>🍕 Pizzas, Pan y Fainá</div>
+        {[...PIZZAS, ...extraItems].map(item => renderRow(item, "pizzas", null))}
+      </div>
+
+      {/* Comidas por día */}
+      {DIAS_LOCAL.map(dia => (
+        <div key={dia} style={{ background: "#fff", borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: "0 2px 10px rgba(123,58,16,0.08)", border: "1px solid rgba(123,58,16,0.1)" }}>
+          <div style={{ fontWeight: "bold", color: C.gold, marginBottom: 14, fontSize: 15 }}>🥘 Comidas Caseras — {dia}</div>
+          {[...MENU[dia], ...(extraItemsByDia[dia] || [])].map(item => renderRow(item, "caseras", dia))}
+        </div>
+      ))}
+
+      <button style={{ ...S.btn(), width: "100%", marginBottom: 10 }} onClick={handleSave}>💾 Guardar todos los cambios</button>
+    </>
+  );
 }
 
 // ── MENU ADMIN COMPONENT ──────────────────────────────────────────────────────
