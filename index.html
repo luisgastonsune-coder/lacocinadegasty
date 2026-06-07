@@ -9,7 +9,7 @@
   <script src="https://unpkg.com/@babel/standalone@7.23.9/babel.min.js"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
     const app = initializeApp({
       apiKey: "AIzaSyA1eh9zIUGji3lxflpWawzIcUYsXk-E4TQ",
       authDomain: "lacocinadegasty-300f7.firebaseapp.com",
@@ -18,7 +18,7 @@
       messagingSenderId: "387145163884",
       appId: "1:387145163884:web:0d14d42479440d74026449"
     });
-    window._db = { fs: getFirestore(app), doc, getDoc, setDoc };
+    window._db = { fs: getFirestore(app), doc, getDoc, setDoc, onSnapshot };
   </script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -44,9 +44,9 @@ let db = null;
 async function getDB() {
   if (db) return db;
   const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
-  const { getFirestore, doc, getDoc, setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+  const { getFirestore, doc, getDoc, setDoc, onSnapshot } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
   const app = initializeApp(firebaseConfig);
-  db = { fs: getFirestore(app), doc, getDoc, setDoc };
+  db = { fs: getFirestore(app), doc, getDoc, setDoc, onSnapshot };
   return db;
 }
 // ──────────────────────────────────────────────────────────────────────────────
@@ -113,6 +113,25 @@ function applyMenuEdit(item, menuEdits) {
 function getFoto(key, fotosCustom) { return (fotosCustom && fotosCustom[key]) || FOTOS[key] || ""; }
 
 // ─── STORAGE ──────────────────────────────────────────────────────────────────
+// Suscripción en tiempo real a un documento de Firebase
+function subscribeData(key, callback) {
+  let unsub = null;
+  let cancelled = false;
+  const trySubscribe = () => {
+    if (cancelled) return;
+    const d = window._db;
+    if (!d) { setTimeout(trySubscribe, 400); return; }
+    const ref = d.doc(d.fs, "gasty", key);
+    unsub = d.onSnapshot(ref, (snap) => {
+      const val = snap.exists() ? (snap.data().value ?? snap.data().v) : null;
+      callback(val);
+    }, (err) => { console.warn("subscribeData error:", key, err); });
+  };
+  trySubscribe();
+  // Retorna función para cancelar la suscripción
+  return () => { cancelled = true; if (unsub) unsub(); };
+}
+
 async function loadData(key, fallback) {
   try {
     const db = await getDB();
@@ -222,21 +241,64 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
   const [menuEdits, setMenuEdits] = useState({}); // overrides del menu base: {id: {nombre,descripcion,precio,oculto}}
 
   useEffect(() => {
+    // Carga inicial de datos que NO necesitan tiempo real (pedidos, fotos)
     (async () => {
-      const [p, s, ef, ed, fc, me] = await Promise.all([
+      const [p, fc] = await Promise.all([
         loadData("gasty-pedidos", []),
-        loadData("gasty-stock2", null),
-        loadData("gasty-extra-fijos", []),
-        loadData("gasty-extra-dias", {}),
         loadData("gasty-fotos", {}),
-        loadData("gasty-menu-edits", {}),
       ]);
       setPedidos(p);
-      setStock(s || buildInitialStock());
-      setExtraItems(ef);
-      setExtraItemsByDia(ed);
-      setMenuEdits(me);
+      if (fc && Object.keys(fc).length) setFotosCustom(fc);
+      // Cargar escalas de fotos
+      try {
+        const db2 = await (async () => { if (window._db) return window._db; await new Promise(r => setTimeout(r, 600)); return window._db; })();
+        if (db2) {
+          const escalasSnap = await db2.getDoc(db2.doc(db2.fs, "gasty", "gasty-foto-escalas"));
+          if (escalasSnap.exists()) setFotoEscalas(escalasSnap.data().v || {});
+        }
+      } catch(e) {}
     })();
+
+    // ── Suscripciones en tiempo real ──
+    const unsubs = [];
+
+    // Stock (incluye cantidad disponible)
+    unsubs.push(subscribeData("gasty-stock2", (val) => {
+      setStock(val || buildInitialStock());
+    }));
+
+    // Extras fijos (pizzas/pan/fainá agregadas por admin)
+    unsubs.push(subscribeData("gasty-extra-fijos", (val) => {
+      setExtraItems(val || []);
+    }));
+
+    // Extras por día (comidas caseras agregadas por admin)
+    unsubs.push(subscribeData("gasty-extra-dias", (val) => {
+      setExtraItemsByDia(val || {});
+    }));
+
+    // Ediciones del menú base (precios, nombres, ocultar)
+    unsubs.push(subscribeData("gasty-menu-edits", (val) => {
+      setMenuEdits(val || {});
+    }));
+
+    // Pedidos en tiempo real (para el admin)
+    unsubs.push(subscribeData("gasty-pedidos", (val) => {
+      if (val) setPedidos(val);
+    }));
+
+    // Fotos en tiempo real
+    unsubs.push(subscribeData("gasty-fotos", (val) => {
+      if (val) setFotosCustom(val);
+    }));
+
+    // Escalas de fotos en tiempo real
+    unsubs.push(subscribeData("gasty-foto-escalas", (val) => {
+      if (val) setFotoEscalas(val);
+    }));
+
+    // Cleanup: cancelar todas las suscripciones al desmontar
+    return () => { unsubs.forEach(u => u && typeof u === "function" && u()); };
   }, []);
 
   const handleLogin = () => {
