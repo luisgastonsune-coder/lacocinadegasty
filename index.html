@@ -148,7 +148,8 @@ async function saveData(key, val) {
     const db = await getDB();
     const ref = db.doc(db.fs, "gasty", key);
     await db.setDoc(ref, { value: val });
-  } catch {
+  } catch(e) {
+    console.error("saveData ERROR en Firebase:", key, e);
     try { await window.storage.set(key, JSON.stringify(val)); } catch {}
   }
 }
