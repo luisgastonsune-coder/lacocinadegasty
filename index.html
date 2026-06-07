@@ -684,21 +684,28 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
 
 // ── STOCK ADMIN COMPONENT ────────────────────────────────────────────────────
 function StockAdmin({ stock, setStock, editStock, setEditStock, extraItems, setExtraItems, extraItemsByDia, setExtraItemsByDia, menuEdits, setMenuEdits, handleStockSave }) {
-  const { useState: useS, useEffect: useEff } = React;
+  const { useState: useS, useEffect: useEff, useRef: useR } = React;
   const [localEdits, setLocalEdits] = useS({});
+  const localEditsRef = useR({});
   const [msg, setMsg] = useS("");
 
   // Sincronizar localEdits cada vez que menuEdits llega/cambia desde Firebase
   useEff(() => {
     if (menuEdits != null) {
-      setLocalEdits(JSON.parse(JSON.stringify(menuEdits)));
+      const copy = JSON.parse(JSON.stringify(menuEdits));
+      setLocalEdits(copy);
+      localEditsRef.current = copy;
     }
   }, [menuEdits]);
 
   const showMsg = (m) => { setMsg(m); setTimeout(() => setMsg(""), 2500); };
 
   const setField = (id, field, val) => {
-    setLocalEdits(prev => ({ ...prev, [id]: { ...(prev[id] || {}), [field]: val } }));
+    setLocalEdits(prev => {
+      const next = { ...prev, [id]: { ...(prev[id] || {}), [field]: val } };
+      localEditsRef.current = next;
+      return next;
+    });
   };
 
   const getVal = (item, field) => {
@@ -715,9 +722,10 @@ function StockAdmin({ stock, setStock, editStock, setEditStock, extraItems, setE
   };
 
   const handleSave = async () => {
-    // Convertir precios a número
+    // Usar ref para tener el valor más actualizado (evita problema de cierre asíncrono)
+    const currentEdits = localEditsRef.current;
     const cleaned = {};
-    Object.entries(localEdits).forEach(([id, ed]) => {
+    Object.entries(currentEdits).forEach(([id, ed]) => {
       cleaned[id] = { ...ed, precio: ed.precio ? parseInt(ed.precio) : undefined };
     });
     await handleStockSave(cleaned);
