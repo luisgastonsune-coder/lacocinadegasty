@@ -148,8 +148,7 @@ async function saveData(key, val) {
     const db = await getDB();
     const ref = db.doc(db.fs, "gasty", key);
     await db.setDoc(ref, { value: val });
-  } catch(e) {
-    console.error("saveData ERROR en Firebase:", key, e);
+  } catch {
     try { await window.storage.set(key, JSON.stringify(val)); } catch {}
   }
 }
@@ -239,7 +238,7 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
   const [fotoEscalas, setFotoEscalas] = useState({});
   const [extraItems, setExtraItems] = useState([]);
   const [extraItemsByDia, setExtraItemsByDia] = useState({});
-  const [menuEdits, setMenuEdits] = useState({}); // overrides del menu base: {id: {nombre,descripcion,precio,oculto}}
+  const [menuEdits, setMenuEdits] = useState(null); // null = cargando, {} = sin ediciones
 
   useEffect(() => {
     // Carga inicial de datos que NO necesitan tiempo real (pedidos, fotos)
@@ -280,7 +279,7 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
 
     // Ediciones del menú base (precios, nombres, ocultar)
     unsubs.push(subscribeData("gasty-menu-edits", (val) => {
-      setMenuEdits(val || {});
+      setMenuEdits(val !== undefined ? (val || {}) : {});
     }));
 
     // Pedidos en tiempo real (para el admin)
@@ -365,14 +364,14 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
       Object.entries(items).forEach(([id, val]) => { newStock[dia][id] = parseInt(val) || 0; });
     });
     const saves = [saveData("gasty-stock2", newStock)];
-    if (newMenuEdits) saves.push(saveData("gasty-menu-edits", newMenuEdits));
+    if (newMenuEdits !== undefined) saves.push(saveData("gasty-menu-edits", newMenuEdits));
     await Promise.all(saves);
     setStock(newStock); setEditStock({});
-    if (newMenuEdits) setMenuEdits(newMenuEdits);
+    if (newMenuEdits !== undefined) setMenuEdits(newMenuEdits);
     alert("✅ Cambios guardados");
   };
 
-  if (!stock) return <div style={{ padding: 40, textAlign: "center", fontFamily: "Georgia,serif", color: C.brown }}>Cargando...</div>;
+  if (!stock || menuEdits === null) return <div style={{ padding: 40, textAlign: "center", fontFamily: "Georgia,serif", color: C.brown }}>Cargando...</div>;
 
   // ── LOGIN ──
   if (screen === "login") return (
@@ -540,7 +539,7 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
                 <div style={{ fontSize: 12, color: "#d4b896" }}>Hechas con amor · Con 24-48hs de anticipación</div>
               </div>
               {/* Todos los items de todas las categorías sin días */}
-              {DIAS.flatMap((dia) => [...MENU[dia].filter(m => !menuEdits[m.id]?.oculto).map(m => applyMenuEdit(m, menuEdits)), ...(extraItemsByDia[dia] || []).filter(i => i.activo !== false)]).filter((item, idx, arr) => arr.findIndex(x => x.id === item.id) === idx).map((item) => {
+              {DIAS.flatMap((dia) => [...MENU[dia].filter(m => !menuEdits?.[m.id]?.oculto).map(m => applyMenuEdit(m, menuEdits)), ...(extraItemsByDia[dia] || []).filter(i => i.activo !== false)]).filter((item, idx, arr) => arr.findIndex(x => x.id === item.id) === idx).map((item) => {
                 const dia = DIAS.find(d => [...MENU[d], ...(extraItemsByDia[d] || [])].some(x => x.id === item.id)) || DIAS[0];
                 return <ItemCard key={item.id} item={item} dia={dia} carrito={carrito} stock={Math.max(...DIAS.map(d => stock[d]?.[item.id] ?? 0))} onAdd={addToCart} onRemove={removeFromCart} />;
               })}
@@ -554,7 +553,7 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
                 <div style={{ fontSize: 20, fontWeight: "bold", marginBottom: 4 }}>🍕 Pizzas Pre-Cocidas</div>
                 <div style={{ fontSize: 12, color: "#d4b896" }}>Listas para hornear en 5 min · Disponibles todos los días</div>
               </div>
-              {[...PIZZAS.filter(p => !menuEdits[p.id]?.oculto).map(p => applyMenuEdit(p, menuEdits)), ...extraItems.filter(i => i.activo !== false)].map((item) => (
+              {[...PIZZAS.filter(p => !menuEdits?.[p.id]?.oculto).map(p => applyMenuEdit(p, menuEdits)), ...extraItems.filter(i => i.activo !== false)].map((item) => (
                 <div key={item.id} style={{ background: "#fff", borderRadius: 16, marginBottom: 14, overflow: "hidden", boxShadow: "0 3px 14px rgba(123,58,16,0.12)", border: "1px solid rgba(123,58,16,0.08)" }}>
                   {item.foto && (
                     <div style={{ position: "relative" }}>
@@ -689,9 +688,9 @@ function StockAdmin({ stock, setStock, editStock, setEditStock, extraItems, setE
   const [localEdits, setLocalEdits] = useS({});
   const [msg, setMsg] = useS("");
 
-  // Sincronizar localEdits con menuEdits que llegan de Firebase
+  // Sincronizar localEdits cada vez que menuEdits llega/cambia desde Firebase
   useEff(() => {
-    if (menuEdits) {
+    if (menuEdits != null) {
       setLocalEdits(JSON.parse(JSON.stringify(menuEdits)));
     }
   }, [menuEdits]);
