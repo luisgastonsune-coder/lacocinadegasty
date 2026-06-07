@@ -197,7 +197,7 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
   const [nombre, setNombre] = useState("");
   const [pass, setPass] = useState("");
   const [loginError, setLoginError] = useState("");
-  const [navTab, setNavTab] = useState("menu"); // menu | pizzas | carta
+  const [navTab, setNavTab] = useState("caseras"); // caseras | pizzas
   const [diaActivo, setDiaActivo] = useState("Lunes");
   const [carrito, setCarrito] = useState({});
   const [nota, setNota] = useState("");
@@ -445,28 +445,31 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
 
         {/* Navegación inferior */}
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#fff", borderTop: "1px solid rgba(123,58,16,0.15)", display: "flex", zIndex: 100, maxWidth: 500, margin: "0 auto" }}>
-          <button style={S.navBtn(navTab === "menu")} onClick={() => setNavTab("menu")}>
-            <span style={{ fontSize: 20 }}>🍽️</span> Menú del día
+          <button style={{...S.navBtn(navTab === "caseras"), flex: 1.2}} onClick={() => setNavTab("caseras")}>
+            <span style={{ fontSize: 22 }}>🥘</span>
+            <span>Comidas Caseras</span>
           </button>
-          <button style={S.navBtn(navTab === "pizzas")} onClick={() => setNavTab("pizzas")}>
-            <span style={{ fontSize: 20 }}>🍕</span> Pizzas
-          </button>
-          <button style={S.navBtn(navTab === "carta")} onClick={() => setNavTab("carta")}>
-            <span style={{ fontSize: 20 }}>📋</span> Carta
+          <button style={{...S.navBtn(navTab === "pizzas"), flex: 1}} onClick={() => setNavTab("pizzas")}>
+            <span style={{ fontSize: 22 }}>🍕</span>
+            <span>Pizzas</span>
           </button>
         </div>
 
         <div style={S.body}>
 
-          {/* ── MENÚ DEL DÍA ── */}
-          {navTab === "menu" && (
+          {/* ── COMIDAS CASERAS ── */}
+          {navTab === "caseras" && (
             <>
-              <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 4 }}>
+              <div style={{ background: `linear-gradient(135deg, ${C.brown}, #a0521e)`, color: C.cream, borderRadius: 14, padding: "16px", marginBottom: 16, textAlign: "center", boxShadow: "0 4px 15px rgba(123,58,16,0.3)" }}>
+                <div style={{ fontSize: 20, fontWeight: "bold", marginBottom: 4 }}>🥘 Comidas Caseras</div>
+                <div style={{ fontSize: 12, color: "#d4b896" }}>Hechas con amor · Con 24-48hs de anticipación</div>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 16, overflowX: "auto", paddingBottom: 4 }}>
                 {DIAS.map((dia) => (
-                  <button key={dia} onClick={() => setDiaActivo(dia)} style={{ ...S.tab(diaActivo === dia), flex: "none", padding: "7px 14px", borderRadius: 20, fontSize: 13 }}>{dia}</button>
+                  <button key={dia} onClick={() => setDiaActivo(dia)} style={{ ...S.tab(diaActivo === dia), flex: "none", padding: "8px 16px", borderRadius: 20, fontSize: 13, fontWeight: diaActivo === dia ? "bold" : "normal", boxShadow: diaActivo === dia ? "0 2px 8px rgba(123,58,16,0.3)" : "none" }}>{dia}</button>
                 ))}
               </div>
-              <p style={{ fontSize: 12, color: "#9b7b5b", marginBottom: 14 }}>📅 Pedidos para el <strong>{diaActivo}</strong> — con 24-48hs de anticipación</p>
+              <p style={{ fontSize: 12, color: "#9b7b5b", marginBottom: 14, background: "rgba(200,149,58,0.1)", padding: "8px 12px", borderRadius: 8, borderLeft: `3px solid ${C.gold}` }}>📅 Menú del <strong>{diaActivo}</strong></p>
               {[...MENU[diaActivo], ...(extraItemsByDia[diaActivo] || []).filter(i => i.activo !== false)].map((item) => (
                 <ItemCard key={item.id} item={item} dia={diaActivo} carrito={carrito} stock={stock[diaActivo]?.[item.id] ?? 0} onAdd={addToCart} onRemove={removeFromCart} />
               ))}
@@ -476,50 +479,46 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
           {/* ── PIZZAS (sección fija) ── */}
           {navTab === "pizzas" && (
             <>
-              <div style={{ background: C.brown, color: C.cream, borderRadius: 10, padding: "12px 16px", marginBottom: 14, textAlign: "center" }}>
-                <div style={{ fontSize: 18, fontWeight: "bold" }}>🍕 Pizzas Pre-Cocidas</div>
-                <div style={{ fontSize: 12, color: "#d4b896", marginTop: 4 }}>Listas para hornear en 5 minutos · Disponibles todos los días</div>
+              <div style={{ background: `linear-gradient(135deg, #8B2500, ${C.brown})`, color: C.cream, borderRadius: 14, padding: "16px", marginBottom: 16, textAlign: "center", boxShadow: "0 4px 15px rgba(139,37,0,0.4)" }}>
+                <div style={{ fontSize: 20, fontWeight: "bold", marginBottom: 4 }}>🍕 Pizzas Pre-Cocidas</div>
+                <div style={{ fontSize: 12, color: "#d4b896" }}>Listas para hornear en 5 min · Disponibles todos los días</div>
               </div>
               {[...PIZZAS, ...extraItems.filter(i => i.activo !== false)].map((item) => (
-                <ItemCard key={item.id} item={item} dia="pizzas" carrito={carrito} stock={stock.pizzas?.[item.id] ?? 0} onAdd={addToCart} onRemove={removeFromCart} stockKey={`pizzas__${item.id}`} />
-              ))}
-            </>
-          )}
-
-          {/* ── CARTA COMPLETA ── */}
-          {navTab === "carta" && (
-            <>
-              <h3 style={{ margin: "0 0 4px" }}>📋 Nuestra carta</h3>
-              <p style={{ fontSize: 12, color: "#aaa", marginBottom: 16 }}>Todos los platos disponibles. Para pedir, elegí el día en "Menú del día" o pizzas en "Pizzas".</p>
-
-              <div style={{ ...S.card, background: "#fff8ee", border: `2px solid ${C.gold}`, padding: "10px 14px", marginBottom: 14 }}>
-                <div style={{ fontWeight: "bold", color: C.brown, marginBottom: 8 }}>🍕 Pizzas y Fainá — Todos los días</div>
-                {PIZZAS.map((p) => (
-                  <div key={p.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 5, borderBottom: "1px solid rgba(123,58,16,0.08)", paddingBottom: 5 }}>
-                    <span>{p.emoji} {p.nombre}</span>
-                    <strong style={{ color: C.gold }}>{formatPrice(p.precio)}</strong>
-                  </div>
-                ))}
-              </div>
-
-              {DIAS.map((dia) => (
-                <div key={dia} style={{ ...S.card, marginBottom: 10 }}>
-                  <div style={{ fontWeight: "bold", color: C.brown, marginBottom: 8 }}>📅 {dia}</div>
-                  {MENU[dia].map((item) => (
-                    <div key={item.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 5, borderBottom: "1px solid rgba(123,58,16,0.08)", paddingBottom: 5 }}>
-                      <div>
-                        <div>{item.emoji} {item.nombre}</div>
-                        <div style={{ fontSize: 11, color: "#aaa" }}>{item.descripcion}</div>
+                <div key={item.id} style={{ background: "#fff", borderRadius: 16, marginBottom: 14, overflow: "hidden", boxShadow: "0 3px 14px rgba(123,58,16,0.12)", border: "1px solid rgba(123,58,16,0.08)" }}>
+                  {item.foto && (
+                    <div style={{ position: "relative" }}>
+                      <img src={item.foto} alt={item.nombre} style={{ width: "100%", height: 170, objectFit: "cover" }} />
+                      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.6))", padding: "20px 14px 10px" }}>
+                        <div style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}>{item.emoji} {item.nombre}</div>
+                        <div style={{ color: "#f0d0a0", fontSize: 12 }}>{item.descripcion}</div>
                       </div>
-                      <strong style={{ color: C.gold, whiteSpace: "nowrap", marginLeft: 10 }}>{formatPrice(item.precio)}</strong>
                     </div>
-                  ))}
+                  )}
+                  <div style={{ padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    {!item.foto && <div><div style={{ fontWeight: "bold", fontSize: 15 }}>{item.emoji} {item.nombre}</div><div style={{ fontSize: 12, color: "#888" }}>{item.descripcion}</div></div>}
+                    {item.foto && <div/>}
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontWeight: "bold", color: C.gold, fontSize: 16 }}>{formatPrice(item.precio)}</span>
+                      {(stock.pizzas?.[item.id] ?? 0) > 0 ? (
+                        carrito[`pizzas__${item.id}`] ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <button onClick={() => removeFromCart(`pizzas__${item.id}`)} style={{ width: 32, height: 32, borderRadius: "50%", border: `2px solid ${C.brown}`, background: "transparent", color: C.brown, fontSize: 20, cursor: "pointer", lineHeight: 1 }}>−</button>
+                            <span style={{ fontWeight: "bold", fontSize: 17, minWidth: 24, textAlign: "center" }}>{carrito[`pizzas__${item.id}`]?.cantidad}</span>
+                            <button onClick={() => addToCart(`pizzas__${item.id}`, "pizzas", item)} style={{ width: 32, height: 32, borderRadius: "50%", background: C.brown, border: "none", color: C.cream, fontSize: 20, cursor: "pointer", lineHeight: 1 }}>+</button>
+                          </div>
+                        ) : (
+                          <button onClick={() => addToCart(`pizzas__${item.id}`, "pizzas", item)} style={{ ...S.btn(C.gold), fontSize: 13, padding: "8px 18px", borderRadius: 20 }}>+ Agregar</button>
+                        )
+                      ) : (
+                        <span style={{ fontSize: 12, color: "#ccc", background: "#f5f5f5", padding: "6px 12px", borderRadius: 16 }}>Sin stock</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ))}
-
-              <p style={{ fontSize: 12, color: "#aaa", textAlign: "center" }}>📱 Consultas: 11 3110-3716</p>
             </>
           )}
+
 
           <div style={{ textAlign: "center", marginTop: 20 }}>
             <button style={{ background: "transparent", border: "none", color: "#bbb", fontSize: 12, cursor: "pointer" }} onClick={() => { setScreen("login"); setNombre(""); setPass(""); setCarrito({}); }}>Cerrar sesión</button>
@@ -553,7 +552,7 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <span style={{ fontSize: 13, color: "#888" }}>{pedidos.filter(p=>!p.entregado).length} pendientes · {pedidos.filter(p=>p.entregado).length} entregados</span>
-                {pedidos.length > 0 && <button onClick={async () => { if(window.confirm("¿Limpiar todos los pedidos del día?")) { await saveData("gasty-pedidos", []); setPedidos([]); } }} style={{ background: "#c0392b", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>🗑 Limpiar todo</button>}
+                {pedidos.length > 0 && <button onClick={async () => { await saveData("gasty-pedidos", []); setPedidos([]); }} style={{ background: "#c0392b", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>🗑 Limpiar todo</button>}
               </div>
               {pedidos.length === 0 && <p style={{ color: "#aaa" }}>Todavía no hay pedidos.</p>}
               {[...pedidos].reverse().map((p) => (
@@ -771,7 +770,7 @@ function MenuAdmin({ extraItems, setExtraItems, extraItemsByDia, setExtraItemsBy
   };
 
   const handleDelete = async (item, tipo, dia) => {
-    if (!window.confirm(`¿Borrar "${item.nombre}"?`)) return;
+    // Sin confirm para evitar problemas en algunos browsers
     if (tipo === "fijo") {
       const updated = extraItems.filter(i => i.id !== item.id);
       setExtraItems(updated); await saveData("gasty-extra-fijos", updated);
@@ -810,7 +809,7 @@ function MenuAdmin({ extraItems, setExtraItems, extraItemsByDia, setExtraItemsBy
             <button onClick={() => toggleActivo(item, tipo, dia)} style={{ background: item.activo === false ? "#27ae60" : "#888", color: "#fff", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 11, cursor: "pointer", fontFamily: "Georgia,serif" }}>
               {item.activo === false ? "✅ Activar" : "⏸ Pausar"}
             </button>
-            <button onClick={() => handleDelete(item, tipo, dia)} style={{ background: "#c0392b", color: "#fff", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 11, cursor: "pointer", fontFamily: "Georgia,serif" }}>🗑️</button>
+            <button onClick={() => handleDelete(item, tipo, dia)} style={{ background: "#c0392b", color: "#fff", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 11, cursor: "pointer", fontFamily: "Georgia,serif" }} title="Eliminar plato">🗑️ Eliminar</button>
           </div>
         </div>
       )}
