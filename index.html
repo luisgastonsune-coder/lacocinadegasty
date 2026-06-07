@@ -163,8 +163,8 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
   return (
     <div style={{ ...S.card, opacity: agotado ? 0.55 : 1 }}>
       {item.foto && (
-        <div style={{ borderRadius: 8, overflow: "hidden", marginBottom: 10, height: 130 }}>
-          <img src={item.foto} alt={item.nombre} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} />
+        <div style={{ borderRadius: 8, overflow: "hidden", marginBottom: 10, height: 130, display: "flex", alignItems: "center", justifyContent: "center", background: "#faf6f0" }}>
+          <img src={item.foto} alt={item.nombre} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} onError={(e) => { e.target.style.display = "none"; }} />
         </div>
       )}
       <div style={{ fontWeight: "bold", fontSize: 15 }}>{item.emoji} {item.nombre}</div>
@@ -211,6 +211,7 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
   const [celularError, setCelularError] = useState("");
   const [showBienvenida, setShowBienvenida] = useState(true);
   const [fotosCustom, setFotosCustom] = useState({});
+  const [fotoEscalas, setFotoEscalas] = useState({});
   const [extraItems, setExtraItems] = useState([]);
   const [extraItemsByDia, setExtraItemsByDia] = useState({});
 
@@ -464,15 +465,11 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
                 <div style={{ fontSize: 20, fontWeight: "bold", marginBottom: 4 }}>🥘 Comidas Caseras</div>
                 <div style={{ fontSize: 12, color: "#d4b896" }}>Hechas con amor · Con 24-48hs de anticipación</div>
               </div>
-              <div style={{ display: "flex", gap: 8, marginBottom: 16, overflowX: "auto", paddingBottom: 4 }}>
-                {DIAS.map((dia) => (
-                  <button key={dia} onClick={() => setDiaActivo(dia)} style={{ ...S.tab(diaActivo === dia), flex: "none", padding: "8px 16px", borderRadius: 20, fontSize: 13, fontWeight: diaActivo === dia ? "bold" : "normal", boxShadow: diaActivo === dia ? "0 2px 8px rgba(123,58,16,0.3)" : "none" }}>{dia}</button>
-                ))}
-              </div>
-              <p style={{ fontSize: 12, color: "#9b7b5b", marginBottom: 14, background: "rgba(200,149,58,0.1)", padding: "8px 12px", borderRadius: 8, borderLeft: `3px solid ${C.gold}` }}>📅 Menú del <strong>{diaActivo}</strong></p>
-              {[...MENU[diaActivo], ...(extraItemsByDia[diaActivo] || []).filter(i => i.activo !== false)].map((item) => (
-                <ItemCard key={item.id} item={item} dia={diaActivo} carrito={carrito} stock={stock[diaActivo]?.[item.id] ?? 0} onAdd={addToCart} onRemove={removeFromCart} />
-              ))}
+              {/* Todos los items de todas las categorías sin días */}
+              {DIAS.flatMap((dia) => [...MENU[dia], ...(extraItemsByDia[dia] || []).filter(i => i.activo !== false)]).filter((item, idx, arr) => arr.findIndex(x => x.id === item.id) === idx).map((item) => {
+                const dia = DIAS.find(d => [...MENU[d], ...(extraItemsByDia[d] || [])].some(x => x.id === item.id)) || DIAS[0];
+                return <ItemCard key={item.id} item={item} dia={dia} carrito={carrito} stock={Math.max(...DIAS.map(d => stock[d]?.[item.id] ?? 0))} onAdd={addToCart} onRemove={removeFromCart} />;
+              })}
             </>
           )}
 
@@ -487,7 +484,9 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
                 <div key={item.id} style={{ background: "#fff", borderRadius: 16, marginBottom: 14, overflow: "hidden", boxShadow: "0 3px 14px rgba(123,58,16,0.12)", border: "1px solid rgba(123,58,16,0.08)" }}>
                   {item.foto && (
                     <div style={{ position: "relative" }}>
-                      <img src={item.foto} alt={item.nombre} style={{ width: "100%", height: 170, objectFit: "cover" }} />
+                      <div style={{ overflow: "hidden", height: 170, display: "flex", alignItems: "center", justifyContent: "center", background: "#faf6f0" }}>
+                      <img src={item.foto} alt={item.nombre} style={{ width: "100%", height: "100%", objectFit: "contain", transform: `scale(${(fotoEscalas[item.id] || fotoEscalas[item.nombre?.toLowerCase().replace(/\s+/g,'_')] || 100)/100})`, transformOrigin: "center center", transition: "transform 0.2s" }} />
+                    </div>
                       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.6))", padding: "20px 14px 10px" }}>
                         <div style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}>{item.emoji} {item.nombre}</div>
                         <div style={{ color: "#f0d0a0", fontSize: 12 }}>{item.descripcion}</div>
@@ -669,18 +668,50 @@ function FotosAdmin({ fotosCustom, setFotosCustom }) {
     reader.readAsDataURL(file);
   }
 
+  const [escalas, setEscalas] = React.useState({});
+
+  const getEscala = (key) => escalas[key] ?? 100;
+  const handleEscala = async (key, val) => {
+    const updated = { ...escalas, [key]: parseInt(val) };
+    setEscalas(updated);
+    await saveData("gasty-foto-escalas", updated);
+  };
+
+  React.useEffect(() => {
+    const db = window._db;
+    if (!db) return;
+    db.getDoc(db.doc(db.fs, "gasty", "gasty-foto-escalas")).then(snap => {
+      if (snap.exists()) setEscalas(snap.data().v || {});
+    });
+  }, []);
+
   return (
     <div>
-      <p style={{ fontSize: 13, color: "#888", marginBottom: 16 }}>Tocá cada foto para cambiarla. Se guarda automáticamente.</p>
+      <p style={{ fontSize: 13, color: "#888", marginBottom: 16 }}>Tocá cada foto para cambiarla. Usá el deslizador para ajustar el tamaño de imagen que ve el cliente.</p>
       {items.map(item => (
-        <div key={item.key} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, background: "#fff", borderRadius: 10, padding: "10px 14px" }}>
-          <img src={fotosCustom[item.key] || FOTOS[item.key] || ""} alt={item.label} style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 8, background: "#eee" }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: "bold", fontSize: 14, marginBottom: 4 }}>{item.label}</div>
-            <label style={{ background: C.brown, color: "#fff", borderRadius: 6, padding: "4px 12px", fontSize: 12, cursor: "pointer" }}>
-              📷 Cambiar foto
-              <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => handleFile(item.key, e)} />
-            </label>
+        <div key={item.key} style={{ background: "#fff", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+            <div style={{ width: 70, height: 70, borderRadius: 8, background: "#eee", overflow: "hidden", flexShrink: 0 }}>
+              <img
+                src={fotosCustom[item.key] || FOTOS[item.key] || ""}
+                alt={item.label}
+                style={{ width: "100%", height: "100%", objectFit: "contain", transform: `scale(${getEscala(item.key)/100})`, transformOrigin: "center center" }}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: "bold", fontSize: 14, marginBottom: 6 }}>{item.label}</div>
+              <label style={{ background: C.brown, color: "#fff", borderRadius: 6, padding: "4px 12px", fontSize: 12, cursor: "pointer" }}>
+                📷 Cambiar foto
+                <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => handleFile(item.key, e)} />
+              </label>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 11, color: "#999", whiteSpace: "nowrap" }}>Escala cliente:</span>
+            <input type="range" min={50} max={200} value={getEscala(item.key)}
+              onChange={e => handleEscala(item.key, e.target.value)}
+              style={{ flex: 1, accentColor: C.brown }} />
+            <span style={{ fontSize: 12, color: C.brown, minWidth: 38, textAlign: "right" }}>{getEscala(item.key)}%</span>
           </div>
         </div>
       ))}
@@ -745,7 +776,7 @@ function MenuAdmin({ extraItems, setExtraItems, extraItemsByDia, setExtraItemsBy
     }
     setForm({ nombre: "", descripcion: "", precio: "", emoji: "🍕", dia: "Lunes", tipo: "diario", foto: null });
     showMsg("✅ Plato agregado.");
-    setTab(form.tipo === "fijo" ? "fijos" : "diarios");
+    setTab("fijos");
   };
 
   const toggleActivo = async (item, tipo, dia) => {
@@ -821,38 +852,35 @@ function MenuAdmin({ extraItems, setExtraItems, extraItemsByDia, setExtraItemsBy
       {msg && <div style={{ background: "#7B3A10", color: "#fff", borderRadius: 8, padding: "10px 14px", marginBottom: 12, fontSize: 14, textAlign: "center" }}>{msg}</div>}
 
       <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
-        {["fijos","diarios","agregar"].map(t => (
+        {["fijos","agregar"].map(t => (
           <button key={t} style={{ flex: 1, padding: "8px 0", background: tab === t ? "#7B3A10" : "transparent", color: tab === t ? "#F5F0E8" : "#7B3A10", border: "none", fontFamily: "Georgia,serif", fontSize: 12, cursor: "pointer", fontWeight: tab === t ? "bold" : "normal", borderRadius: 8 }}
             onClick={() => setTab(t)}>
-            {t === "fijos" ? "Fijos" : t === "diarios" ? "Por día" : "+ Agregar"}
+            {t === "fijos" ? "Ver platos" : "Agregar"}
           </button>
         ))}
       </div>
 
-      {/* FIJOS */}
+      {/* VER PLATOS */}
       {tab === "fijos" && (
         <>
-          <p style={{ fontSize: 12, color: "#aaa", marginBottom: 12 }}>Platos fijos que aparecen todos los días (pizzas, pan, fainá).</p>
-          {extraItems.length === 0 && <p style={{ color: "#ccc", fontSize: 13 }}>No hay platos extra fijos todavía.</p>}
-          {extraItems.map(item => renderItem(item, "fijo", null))}
-        </>
-      )}
-
-      {/* POR DÍA */}
-      {tab === "diarios" && (
-        <>
-          <p style={{ fontSize: 12, color: "#aaa", marginBottom: 12 }}>Platos extra agregados por vos, por día.</p>
+          <p style={{ fontSize: 12, color: "#aaa", marginBottom: 12 }}>Platos del menú (pizzas/fainá y extras).</p>
+          {extraItems.length === 0 && DIAS_ALL.every(d => !(extraItemsByDia[d] || []).length) && <p style={{ color: "#ccc", fontSize: 13 }}>No hay platos extra todavía.</p>}
+          {extraItems.length > 0 && (
+            <>
+              <div style={{ fontWeight: "bold", color: "#C8953A", marginBottom: 8 }}>🍕 Pizzas / Fainá / Pan</div>
+              {extraItems.map(item => renderItem(item, "fijo", null))}
+            </>
+          )}
           {DIAS_ALL.map(dia => (
             <div key={dia}>
               {(extraItemsByDia[dia] || []).length > 0 && (
                 <>
-                  <div style={{ fontWeight: "bold", color: "#C8953A", marginBottom: 8, marginTop: 4 }}>📅 {dia}</div>
+                  <div style={{ fontWeight: "bold", color: "#C8953A", marginBottom: 8, marginTop: 12 }}>🥘 Comidas Caseras</div>
                   {(extraItemsByDia[dia] || []).map(item => renderItem(item, "diario", dia))}
                 </>
               )}
             </div>
           ))}
-          {DIAS_ALL.every(d => !(extraItemsByDia[d] || []).length) && <p style={{ color: "#ccc", fontSize: 13 }}>No hay platos extra por día todavía.</p>}
         </>
       )}
 
@@ -861,21 +889,11 @@ function MenuAdmin({ extraItems, setExtraItems, extraItemsByDia, setExtraItemsBy
         <div style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 2px 8px rgba(123,58,16,0.08)", border: "1px solid rgba(123,58,16,0.1)" }}>
           <h3 style={{ margin: "0 0 14px", color: "#7B3A10" }}>Agregar nuevo plato</h3>
 
-          <label style={{ fontSize: 12, color: "#7B3A10", fontWeight: "bold", display: "block", marginBottom: 4 }}>Tipo</label>
+          <label style={{ fontSize: 12, color: "#7B3A10", fontWeight: "bold", display: "block", marginBottom: 4 }}>Categoría</label>
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            <button onClick={() => setForm(p => ({ ...p, tipo: "fijo" }))} style={{ flex: 1, padding: "8px", background: form.tipo === "fijo" ? "#7B3A10" : "transparent", color: form.tipo === "fijo" ? "#F5F0E8" : "#7B3A10", border: "1.5px solid #7B3A10", borderRadius: 8, fontFamily: "Georgia,serif", fontSize: 13, cursor: "pointer" }}>Fijo (todos los días)</button>
-            <button onClick={() => setForm(p => ({ ...p, tipo: "diario" }))} style={{ flex: 1, padding: "8px", background: form.tipo === "diario" ? "#7B3A10" : "transparent", color: form.tipo === "diario" ? "#F5F0E8" : "#7B3A10", border: "1.5px solid #7B3A10", borderRadius: 8, fontFamily: "Georgia,serif", fontSize: 13, cursor: "pointer" }}>Por día específico</button>
+            <button onClick={() => setForm(p => ({ ...p, tipo: "fijo" }))} style={{ flex: 1, padding: "8px", background: form.tipo === "fijo" ? "#7B3A10" : "transparent", color: form.tipo === "fijo" ? "#F5F0E8" : "#7B3A10", border: "1.5px solid #7B3A10", borderRadius: 8, fontFamily: "Georgia,serif", fontSize: 13, cursor: "pointer" }}>🍕 Pizzas / Fainá / Pan</button>
+            <button onClick={() => setForm(p => ({ ...p, tipo: "diario" }))} style={{ flex: 1, padding: "8px", background: form.tipo === "diario" ? "#7B3A10" : "transparent", color: form.tipo === "diario" ? "#F5F0E8" : "#7B3A10", border: "1.5px solid #7B3A10", borderRadius: 8, fontFamily: "Georgia,serif", fontSize: 13, cursor: "pointer" }}>🥘 Comidas Caseras</button>
           </div>
-
-          {form.tipo === "diario" && (
-            <>
-              <label style={{ fontSize: 12, color: "#7B3A10", fontWeight: "bold", display: "block", marginBottom: 4 }}>Día</label>
-              <select value={form.dia} onChange={e => setForm(p => ({ ...p, dia: e.target.value }))}
-                style={{ width: "100%", padding: "11px 13px", borderRadius: 8, border: "1.5px solid rgba(123,58,16,0.3)", fontFamily: "Georgia,serif", fontSize: 14, color: "#7B3A10", background: "#fff", marginBottom: 10 }}>
-                {DIAS_ALL.map(d => <option key={d}>{d}</option>)}
-              </select>
-            </>
-          )}
 
           <label style={{ fontSize: 12, color: "#7B3A10", fontWeight: "bold", display: "block", marginBottom: 4 }}>Emoji</label>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
