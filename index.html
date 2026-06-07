@@ -684,9 +684,16 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
 
 // ── STOCK ADMIN COMPONENT ────────────────────────────────────────────────────
 function StockAdmin({ stock, setStock, editStock, setEditStock, extraItems, setExtraItems, extraItemsByDia, setExtraItemsByDia, menuEdits, setMenuEdits, handleStockSave }) {
-  const { useState: useS } = React;
-  const [localEdits, setLocalEdits] = useS(() => JSON.parse(JSON.stringify(menuEdits || {})));
+  const { useState: useS, useEffect: useEff } = React;
+  const [localEdits, setLocalEdits] = useS({});
   const [msg, setMsg] = useS("");
+
+  // Sincronizar localEdits con menuEdits que llegan de Firebase
+  useEff(() => {
+    if (menuEdits) {
+      setLocalEdits(JSON.parse(JSON.stringify(menuEdits)));
+    }
+  }, [menuEdits]);
 
   const showMsg = (m) => { setMsg(m); setTimeout(() => setMsg(""), 2500); };
 
