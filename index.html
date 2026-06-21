@@ -238,6 +238,7 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
   const [fotoEscalas, setFotoEscalas] = useState({});
   const [extraItems, setExtraItems] = useState([]);
   const [extraItemsByDia, setExtraItemsByDia] = useState({});
+  const [extraDulces, setExtraDulces] = useState([]);
   const [menuEdits, setMenuEdits] = useState(null); // null = cargando, {} = sin ediciones
 
   useEffect(() => {
@@ -275,6 +276,9 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
     // Extras por día (comidas caseras agregadas por admin)
     unsubs.push(subscribeData("gasty-extra-dias", (val) => {
       setExtraItemsByDia(val || {});
+    }));
+    unsubs.push(subscribeData("gasty-extra-dulces", (val) => {
+      setExtraDulces(val || []);
     }));
 
     // Ediciones del menú base (precios, nombres, ocultar)
@@ -527,6 +531,10 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
             <span style={{ fontSize: 22 }}>🍕</span>
             <span>Pizzas</span>
           </button>
+          <button style={{...S.navBtn(navTab === "dulces"), flex: 1}} onClick={() => setNavTab("dulces")}>
+            <span style={{ fontSize: 22 }}>🍬</span>
+            <span>Dulces</span>
+          </button>
         </div>
 
         <div style={S.body}>
@@ -547,6 +555,22 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
           )}
 
           {/* ── PIZZAS (sección fija) ── */}
+          {/* ── DULCES CASEROS ── */}
+          {navTab === "dulces" && (
+            <>
+              <div style={{ background: `linear-gradient(135deg, #c0392b, #e74c3c)`, color: "#fff", borderRadius: 14, padding: "16px", marginBottom: 16, textAlign: "center", boxShadow: "0 4px 15px rgba(192,57,43,0.3)" }}>
+                <div style={{ fontSize: 20, fontWeight: "bold", marginBottom: 4 }}>🍬 Dulces Caseros</div>
+                <div style={{ fontSize: 12, color: "#f9c0c0" }}>Hechos con amor · Sin conservantes</div>
+              </div>
+              {extraDulces.filter(i => i.activo !== false && !menuEdits?.[i.id]?.oculto).map((item) => (
+                <ItemCard key={item.id} item={item} dia="dulces" carrito={carrito} stock={stock["dulces"]?.[item.id] ?? 0} onAdd={addToCart} onRemove={removeFromCart} stockKey={`dulces__${item.id}`} />
+              ))}
+              {extraDulces.filter(i => i.activo !== false).length === 0 && (
+                <p style={{ textAlign: "center", color: "#aaa", fontSize: 14, marginTop: 40 }}>Próximamente... 🍬</p>
+              )}
+            </>
+          )}
+
           {navTab === "pizzas" && (
             <>
               <div style={{ background: `linear-gradient(135deg, #8B2500, ${C.brown})`, color: C.cream, borderRadius: 14, padding: "16px", marginBottom: 16, textAlign: "center", boxShadow: "0 4px 15px rgba(139,37,0,0.4)" }}>
@@ -660,13 +684,14 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
               editStock={editStock} setEditStock={setEditStock}
               extraItems={extraItems} setExtraItems={setExtraItems}
               extraItemsByDia={extraItemsByDia} setExtraItemsByDia={setExtraItemsByDia}
+              extraDulces={extraDulces} setExtraDulces={setExtraDulces}
               menuEdits={menuEdits} setMenuEdits={setMenuEdits}
               handleStockSave={handleStockSave}
             />
           )}
 
           {/* ── MENÚ ── */}
-          {adminTab === "menu" && <MenuAdmin extraItems={extraItems} setExtraItems={setExtraItems} extraItemsByDia={extraItemsByDia} setExtraItemsByDia={setExtraItemsByDia} stock={stock} setStock={setStock} />}
+          {adminTab === "menu" && <MenuAdmin extraItems={extraItems} setExtraItems={setExtraItems} extraItemsByDia={extraItemsByDia} setExtraItemsByDia={setExtraItemsByDia} extraDulces={extraDulces} setExtraDulces={setExtraDulces} stock={stock} setStock={setStock} />}
 
           {/* ── FOTOS ── */}
           {adminTab === "fotos" && <FotosAdmin fotosCustom={fotosCustom} setFotosCustom={setFotosCustom} />}
@@ -683,44 +708,35 @@ function ItemCard({ item, dia, carrito, stock, onAdd, onRemove, stockKey }) {
 }
 
 // ── STOCK ADMIN COMPONENT ────────────────────────────────────────────────────
-function StockAdmin({ stock, setStock, editStock, setEditStock, extraItems, setExtraItems, extraItemsByDia, setExtraItemsByDia, menuEdits, setMenuEdits, handleStockSave }) {
+function StockAdmin({ stock, setStock, editStock, setEditStock, extraItems, setExtraItems, extraItemsByDia, setExtraItemsByDia, extraDulces, setExtraDulces, menuEdits, setMenuEdits, handleStockSave }) {
   const { useState: useS, useEffect: useEff, useRef: useR } = React;
   const [localEdits, setLocalEdits] = useS({});
   const localEditsRef = useR({});
   const [msg, setMsg] = useS("");
 
-  // Inicializar localEdits con TODOS los items del menú + valores de Firebase
+  // Inicializar localEdits con TODOS los items + valores de Firebase
   useEff(() => {
     if (menuEdits != null) {
-      // Construir objeto con TODOS los items del menú base
       const all = {};
-      // Pizzas
       [...PIZZAS, ...extraItems].forEach(item => {
         const ed = menuEdits[item.id] || {};
-        all[item.id] = {
-          nombre: ed.nombre ?? item.nombre,
-          descripcion: ed.descripcion ?? item.descripcion,
-          precio: ed.precio ?? item.precio,
-          oculto: ed.oculto ?? false,
-        };
+        all[item.id] = { nombre: ed.nombre ?? item.nombre, descripcion: ed.descripcion ?? item.descripcion, precio: ed.precio ?? item.precio, oculto: ed.oculto ?? false };
       });
-      // Comidas caseras
-      const DIAS_LOCAL = ["Lunes", "Martes", "Miércoles", "Jueves"];
-      DIAS_LOCAL.forEach(dia => {
+      const DIAS_L = ["Lunes", "Martes", "Miércoles", "Jueves"];
+      DIAS_L.forEach(dia => {
         [...MENU[dia], ...(extraItemsByDia[dia] || [])].forEach(item => {
           const ed = menuEdits[item.id] || {};
-          all[item.id] = {
-            nombre: ed.nombre ?? item.nombre,
-            descripcion: ed.descripcion ?? item.descripcion,
-            precio: ed.precio ?? item.precio,
-            oculto: ed.oculto ?? false,
-          };
+          all[item.id] = { nombre: ed.nombre ?? item.nombre, descripcion: ed.descripcion ?? item.descripcion, precio: ed.precio ?? item.precio, oculto: ed.oculto ?? false };
         });
+      });
+      extraDulces.forEach(item => {
+        const ed = menuEdits[item.id] || {};
+        all[item.id] = { nombre: ed.nombre ?? item.nombre, descripcion: ed.descripcion ?? item.descripcion, precio: ed.precio ?? item.precio, oculto: ed.oculto ?? false };
       });
       setLocalEdits(all);
       localEditsRef.current = all;
     }
-  }, [menuEdits, extraItems, extraItemsByDia]);
+  }, [menuEdits, extraItems, extraItemsByDia, extraDulces]);
 
   const showMsg = (m) => { setMsg(m); setTimeout(() => setMsg(""), 2500); };
 
@@ -746,7 +762,6 @@ function StockAdmin({ stock, setStock, editStock, setEditStock, extraItems, setE
   };
 
   const handleSave = async () => {
-    // Usar ref para tener el valor más actualizado (evita problema de cierre asíncrono)
     const currentEdits = localEditsRef.current;
     const cleaned = {};
     Object.entries(currentEdits).forEach(([id, ed]) => {
@@ -759,6 +774,8 @@ function StockAdmin({ stock, setStock, editStock, setEditStock, extraItems, setE
   const renderRow = (item, categoria, dia) => {
     const stockVal = categoria === "pizzas"
       ? (editStock["pizzas"]?.[item.id] ?? stock?.pizzas?.[item.id] ?? 0)
+      : categoria === "dulces"
+      ? (editStock["dulces"]?.[item.id] ?? stock?.["dulces"]?.[item.id] ?? 0)
       : (editStock[dia]?.[item.id] ?? stock?.[dia]?.[item.id] ?? 0);
     const oculto = isOculto(item.id);
     const isExtra = item.id?.startsWith("custom-");
@@ -778,6 +795,8 @@ function StockAdmin({ stock, setStock, editStock, setEditStock, extraItems, setE
             onChange={(e) => {
               if (categoria === "pizzas") {
                 setEditStock(prev => ({ ...prev, pizzas: { ...(prev.pizzas || {}), [item.id]: e.target.value } }));
+              } else if (categoria === "dulces") {
+                setEditStock(prev => ({ ...prev, dulces: { ...(prev.dulces || {}), [item.id]: e.target.value } }));
               } else {
                 setEditStock(prev => ({ ...prev, [dia]: { ...(prev[dia] || {}), [item.id]: e.target.value } }));
               }
@@ -797,6 +816,9 @@ function StockAdmin({ stock, setStock, editStock, setEditStock, extraItems, setE
                 if (categoria === "pizzas") {
                   const updated = extraItems.filter(i => i.id !== item.id);
                   setExtraItems(updated); await saveData("gasty-extra-fijos", updated);
+                } else if (categoria === "dulces") {
+                  const updated = extraDulces.filter(i => i.id !== item.id);
+                  setExtraDulces(updated); await saveData("gasty-extra-dulces", updated);
                 } else {
                   const updated = { ...extraItemsByDia, [dia]: (extraItemsByDia[dia] || []).filter(i => i.id !== item.id) };
                   setExtraItemsByDia(updated); await saveData("gasty-extra-dias", updated);
@@ -851,6 +873,14 @@ function StockAdmin({ stock, setStock, editStock, setEditStock, extraItems, setE
           {[...MENU[dia], ...(extraItemsByDia[dia] || [])].map(item => renderRow(item, "caseras", dia))}
         </div>
       ))}
+
+      {/* Dulces Caseros */}
+      {extraDulces.length > 0 && (
+        <div style={{ background: "#fff", borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: "0 2px 10px rgba(123,58,16,0.08)", border: "1px solid rgba(192,57,43,0.2)" }}>
+          <div style={{ fontWeight: "bold", color: "#c0392b", marginBottom: 14, fontSize: 15 }}>🍬 Dulces Caseros</div>
+          {extraDulces.map(item => renderRow(item, "dulces", null))}
+        </div>
+      )}
 
       <button style={{ ...S.btn(), width: "100%", marginBottom: 10 }} onClick={handleSave}>💾 Guardar todos los cambios</button>
     </>
@@ -942,7 +972,7 @@ function FotosAdmin({ fotosCustom, setFotosCustom }) {
 }
 
 
-function MenuAdmin({ extraItems, setExtraItems, extraItemsByDia, setExtraItemsByDia, stock, setStock }) {
+function MenuAdmin({ extraItems, setExtraItems, extraItemsByDia, setExtraItemsByDia, extraDulces, setExtraDulces, stock, setStock }) {
   const [tab, setTab] = useState("fijos"); // fijos | diarios | agregar
   const [form, setForm] = useState({ nombre: "", descripcion: "", precio: "", emoji: "🍕", dia: "Lunes", tipo: "diario", foto: null });
   const [editId, setEditId] = useState(null);
@@ -989,6 +1019,12 @@ function MenuAdmin({ extraItems, setExtraItems, extraItemsByDia, setExtraItemsBy
       await saveData("gasty-extra-fijos", updated);
       const newStock = { ...stock, pizzas: { ...stock.pizzas, [newItem.id]: 10 } };
       setStock(newStock); await saveData("gasty-stock2", newStock);
+    } else if (form.tipo === "dulce") {
+      const updated = [...extraDulces, newItem];
+      setExtraDulces(updated);
+      await saveData("gasty-extra-dulces", updated);
+      const newStock = { ...stock, dulces: { ...stock.dulces, [newItem.id]: 10 } };
+      setStock(newStock); await saveData("gasty-stock2", newStock);
     } else {
       const updated = { ...extraItemsByDia, [form.dia]: [...(extraItemsByDia[form.dia] || []), newItem] };
       setExtraItemsByDia(updated);
@@ -1015,6 +1051,9 @@ function MenuAdmin({ extraItems, setExtraItems, extraItemsByDia, setExtraItemsBy
     if (tipo === "fijo") {
       const updated = extraItems.map(i => i.id === item.id ? { ...i, ...editData, precio: parseInt(editData.precio) || i.precio } : i);
       setExtraItems(updated); await saveData("gasty-extra-fijos", updated);
+    } else if (tipo === "dulce") {
+      const updated = extraDulces.map(i => i.id === item.id ? { ...i, ...editData, precio: parseInt(editData.precio) || i.precio } : i);
+      setExtraDulces(updated); await saveData("gasty-extra-dulces", updated);
     } else {
       const updated = { ...extraItemsByDia, [dia]: (extraItemsByDia[dia] || []).map(i => i.id === item.id ? { ...i, ...editData, precio: parseInt(editData.precio) || i.precio } : i) };
       setExtraItemsByDia(updated); await saveData("gasty-extra-dias", updated);
@@ -1027,6 +1066,9 @@ function MenuAdmin({ extraItems, setExtraItems, extraItemsByDia, setExtraItemsBy
     if (tipo === "fijo") {
       const updated = extraItems.filter(i => i.id !== item.id);
       setExtraItems(updated); await saveData("gasty-extra-fijos", updated);
+    } else if (tipo === "dulce") {
+      const updated = extraDulces.filter(i => i.id !== item.id);
+      setExtraDulces(updated); await saveData("gasty-extra-dulces", updated);
     } else {
       const updated = { ...extraItemsByDia, [dia]: (extraItemsByDia[dia] || []).filter(i => i.id !== item.id) };
       setExtraItemsByDia(updated); await saveData("gasty-extra-dias", updated);
@@ -1103,6 +1145,12 @@ function MenuAdmin({ extraItems, setExtraItems, extraItemsByDia, setExtraItemsBy
               )}
             </div>
           ))}
+          {extraDulces.length > 0 && (
+            <>
+              <div style={{ fontWeight: "bold", color: "#c0392b", marginBottom: 8, marginTop: 12 }}>🍬 Dulces Caseros</div>
+              {extraDulces.map(item => renderItem(item, "dulce", null))}
+            </>
+          )}
         </>
       )}
 
@@ -1112,9 +1160,10 @@ function MenuAdmin({ extraItems, setExtraItems, extraItemsByDia, setExtraItemsBy
           <h3 style={{ margin: "0 0 14px", color: "#7B3A10" }}>Agregar nuevo plato</h3>
 
           <label style={{ fontSize: 12, color: "#7B3A10", fontWeight: "bold", display: "block", marginBottom: 4 }}>Categoría</label>
-          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            <button onClick={() => setForm(p => ({ ...p, tipo: "fijo" }))} style={{ flex: 1, padding: "8px", background: form.tipo === "fijo" ? "#7B3A10" : "transparent", color: form.tipo === "fijo" ? "#F5F0E8" : "#7B3A10", border: "1.5px solid #7B3A10", borderRadius: 8, fontFamily: "Georgia,serif", fontSize: 13, cursor: "pointer" }}>🍕 Pizzas / Fainá / Pan</button>
-            <button onClick={() => setForm(p => ({ ...p, tipo: "diario" }))} style={{ flex: 1, padding: "8px", background: form.tipo === "diario" ? "#7B3A10" : "transparent", color: form.tipo === "diario" ? "#F5F0E8" : "#7B3A10", border: "1.5px solid #7B3A10", borderRadius: 8, fontFamily: "Georgia,serif", fontSize: 13, cursor: "pointer" }}>🥘 Comidas Caseras</button>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+            <button onClick={() => setForm(p => ({ ...p, tipo: "fijo" }))} style={{ flex: 1, padding: "8px", background: form.tipo === "fijo" ? "#7B3A10" : "transparent", color: form.tipo === "fijo" ? "#F5F0E8" : "#7B3A10", border: "1.5px solid #7B3A10", borderRadius: 8, fontFamily: "Georgia,serif", fontSize: 12, cursor: "pointer" }}>🍕 Pizzas / Fainá</button>
+            <button onClick={() => setForm(p => ({ ...p, tipo: "diario" }))} style={{ flex: 1, padding: "8px", background: form.tipo === "diario" ? "#7B3A10" : "transparent", color: form.tipo === "diario" ? "#F5F0E8" : "#7B3A10", border: "1.5px solid #7B3A10", borderRadius: 8, fontFamily: "Georgia,serif", fontSize: 12, cursor: "pointer" }}>🥘 Comidas Caseras</button>
+            <button onClick={() => setForm(p => ({ ...p, tipo: "dulce" }))} style={{ flex: 1, padding: "8px", background: form.tipo === "dulce" ? "#c0392b" : "transparent", color: form.tipo === "dulce" ? "#fff" : "#c0392b", border: "1.5px solid #c0392b", borderRadius: 8, fontFamily: "Georgia,serif", fontSize: 12, cursor: "pointer" }}>🍬 Dulces Caseros</button>
           </div>
 
           <label style={{ fontSize: 12, color: "#7B3A10", fontWeight: "bold", display: "block", marginBottom: 4 }}>Emoji</label>
